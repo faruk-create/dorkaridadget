@@ -1,0 +1,1263 @@
+    sales: 380,
+    image: 'https://images.unsplash.com/photo-1621607512214-68297480165e?w=500&auto=format&fit=crop&q=60',
+    description: 'প্রফেশনাল হেয়ার ও বিয়ার্ড ট্রিমার। সম্পূর্ণ মেটাল বডি, ১০০০mAh রিচার্জেবল ব্যাটারি এবং স্টাইলিশ ফিনিশিং।'
+  },
+  {import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import {
+  getFirestore,
+  collection,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp
+} from 'firebase/firestore';
+import {
+  ShoppingBag, Search, Heart, User, Clock, Flame, ShieldCheck,
+  Truck, RefreshCw, ChevronRight, Star, Plus, Minus, X, Check,
+  Menu, ArrowRight, PhoneCall, Zap, Grid, Tag, Sparkles, LayoutDashboard,
+  Package, DollarSign, Users, Edit3, Trash2, CheckCircle2, TrendingUp,
+  SlidersHorizontal, Eye, LogOut, ArrowLeft, AlertCircle, ShoppingCart, Home
+} from 'lucide-react';
+
+// --- FIREBASE INITIALIZATION ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDummyKeyForPreviewModeOnly12345",
+  authDomain: "dorkari-gadget.firebaseapp.com",
+  projectId: "dorkari-gadget",
+  storageBucket: "dorkari-gadget.appspot.com",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:abcdef123456"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Strict Firestore Collection Path Helper
+const getArtifactCollection = (collectionName) => {
+  const appId = typeof window !== 'undefined' && window.__ARTIFACT_ID__ ? window.__ARTIFACT_ID__ : 'default-dorkari-app';
+  return collection(db, 'artifacts', appId, 'public', 'data', collectionName);
+};
+
+// --- MOCK / INITIAL DATA ---
+const INITIAL_PRODUCTS = [
+  {
+    id: 'prod-1',
+    name: 'T9 Heavy Metal Hair & Beard Trimmer',
+    category: 'grooming',
+    price: 650,
+    originalPrice: 1200,
+    discount: '46%',
+    rating: 4.8,
+    reviews: 142,
+    stock: 25,
+
+    id: 'prod-2',
+    name: 'M10 TWS Wireless Earbuds Gaming Headset',
+    category: 'earbuds',
+    price: 450,
+    originalPrice: 950,
+    discount: '52%',
+    rating: 4.7,
+    reviews: 210,
+    stock: 18,
+    sales: 520,
+    image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=60',
+    description: '2000mAh পাওয়ারব্যাংক কেস সহ দুর্দান্ত বেস ও গেমিং লো-লেটেন্সি সাউন্ড পাওয়ারফুল ট্রু ওয়্যারলেস ইয়ারবাডস।'
+  },
+  {
+    id: 'prod-3',
+    name: 'T800 Ultra Smart Watch with Bluetooth Calling',
+    category: 'smartwatch',
+    price: 990,
+    originalPrice: 1850,
+    discount: '46%',
+    rating: 4.9,
+    reviews: 95,
+    stock: 12,
+    sales: 190,
+    image: 'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=500&auto=format&fit=crop&q=60',
+    description: '১.৯৯ ইঞ্চি বড় ডিসপ্লে, ওয়্যারলেস চার্জিং, ফিটনেস ট্র্যাকার এবং ব্লুটুথ কলিং সুবিধা সহ অল্ট্রা স্মার্টওয়াচ।'
+  },
+  {
+    id: 'prod-4',
+    name: 'Flexible Mini USB LED Light Fan Combo',
+    category: 'accessories',
+    price: 190,
+    originalPrice: 350,
+    discount: '45%',
+    rating: 4.5,
+    reviews: 88,
+    stock: 50,
+    sales: 610,
+    image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60',
+    description: 'পাওয়ারব্যাংক বা ল্যাপটপে ব্যবহারের জন্য বহনযোগ্য মিনি ইউএসবি ফ্যান ও ব্রাইট এলইডি নাইট লাইট।'
+  }
+];
+
+const CATEGORIES = [
+  { id: 'all', name: 'সব গ্যাজেট (All)', icon: '⚡' },
+  { id: 'grooming', name: 'ট্রিমার ও গ্রুমিং', icon: '✂️' },
+  { id: 'earbuds', name: 'ইয়ারবাডস ও হেডফোন', icon: '🎧' },
+  { id: 'smartwatch', name: 'স্মার্টওয়াচ', icon: '⌚' },
+  { id: 'accessories', name: 'মোবাইল এক্সেসরিজ', icon: '🔌' },
+];
+
+export default function App() {
+  // Navigation & View Mode State
+  const [viewMode, setViewMode] = useState('store'); // 'store' | 'tracking' | 'admin'
+
+  // Storefront State
+  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cart, setCart] = useState([]);
+  const [wishlist, setWishlist] = useState([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  // Orders State
+  const [orders, setOrders] = useState([]);
+  const [trackingPhone, setTrackingPhone] = useState('');
+  const [searchedOrders, setSearchedOrders] = useState(null);
+
+  // Checkout Form State
+  const [customerInfo, setCustomerInfo] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    district: 'ঢাকা (Dhaka)',
+    paymentMethod: 'cod',
+    trxId: ''
+  });
+
+  // Admin New Product Form
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    category: 'grooming',
+    price: '',
+    originalPrice: '',
+    stock: '',
+    image: '',
+    description: ''
+  });
+
+  // Flash Sale Countdown
+  const [timeLeft, setTimeLeft] = useState({ hours: 12, minutes: 45, seconds: 30 });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
+        if (prev.minutes > 0) return { ...prev, minutes: 59, seconds: 59 };
+        if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
+        return prev;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Sync Products from Firestore
+  useEffect(() => {
+    try {
+      const productsRef = getArtifactCollection('products');
+      const unsubscribe = onSnapshot(productsRef, (snapshot) => {
+        if (!snapshot.empty) {
+          const docsData = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+          setProducts(docsData);
+        }
+      }, (error) => {
+        console.warn("Firestore sync warning (using fallback data):", error);
+      });
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn("Firestore initialization error", e);
+    }
+  }, []);
+
+  // Sync Orders from Firestore
+  useEffect(() => {
+    try {
+      const ordersRef = getArtifactCollection('orders');
+      const unsubscribe = onSnapshot(ordersRef, (snapshot) => {
+        const docsData = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+        setOrders(docsData);
+      }, (error) => console.warn("Orders fetch error:", error));
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn("Firestore orders init error", e);
+    }
+  }, []);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  const handleResetToHome = () => {
+    setViewMode('store');
+    setSelectedCategory('all');
+    setSearchQuery('');
+    setIsMenuOpen(false);
+    setIsCartOpen(false);
+    setIsCheckoutOpen(false);
+    setQuickViewProduct(null);
+  };
+
+  const addToCart = (product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.id === product.id);
+      if (existing) {
+        return prev.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item);
+      }
+      return [...prev, { ...product, qty: 1 }];
+    });
+    showToast('কার্টে যুক্ত করা হয়েছে!');
+  };
+
+  const updateCartQty = (id, delta) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        const newQty = item.qty + delta;
+        return newQty > 0 ? { ...item, qty: newQty } : null;
+      }
+      return item;
+    }).filter(Boolean));
+  };
+
+  const toggleWishlist = (id) => {
+    setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    showToast('উইশলিস্ট আপডেট করা হয়েছে');
+  };
+
+  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  const deliveryCharge = customerInfo.district.includes('ঢাকা') ? 60 : 120;
+  const grandTotal = cartTotal > 0 ? cartTotal + deliveryCharge : 0;
+  const cartItemCount = cart.reduce((sum, item) => sum + item.qty, 0);
+
+  const filteredProducts = products.filter(p => {
+    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  // Handle Submit Order
+  const handlePlaceOrder = async (e) => {
+    e.preventDefault();
+    if (cart.length === 0) return showToast('আপনার কার্ট খালি!');
+    if (!customerInfo.name || !customerInfo.phone || !customerInfo.address) {
+      return showToast('অনুগ্রহ করে সঠিক তথ্য দিন!');
+    }
+
+    const newOrderData = {
+      orderId: 'DG-' + Math.floor(100000 + Math.random() * 900000),
+      customerName: customerInfo.name,
+      phone: customerInfo.phone,
+      address: customerInfo.address,
+      district: customerInfo.district,
+      paymentMethod: customerInfo.paymentMethod,
+      trxId: customerInfo.trxId || 'N/A',
+      items: cart,
+      subtotal: cartTotal,
+      deliveryCharge,
+      totalAmount: grandTotal,
+      status: 'Pending',
+      createdAt: new Date().toLocaleDateString('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' })
+    };
+
+    try {
+      const ordersRef = getArtifactCollection('orders');
+      await addDoc(ordersRef, { ...newOrderData, timestamp: serverTimestamp() });
+      showToast('অর্ডার সফলভাবে গ্রহন করা হয়েছে!');
+      setCart([]);
+      setIsCheckoutOpen(false);
+      setCustomerInfo({ name: '', phone: '', address: '', district: 'ঢাকা (Dhaka)', paymentMethod: 'cod', trxId: '' });
+      setViewMode('tracking');
+      setTrackingPhone(newOrderData.phone);
+      handleSearchOrder(newOrderData.phone);
+    } catch (err) {
+      console.error(err);
+      // Local fallback
+      setOrders(prev => [newOrderData, ...prev]);
+      showToast('অর্ডার সফল হয়েছে (লোকাল রিসিভ)!');
+      setCart([]);
+      setIsCheckoutOpen(false);
+    }
+  };
+
+  // Search Customer Order
+  const handleSearchOrder = (phoneNum) => {
+    const term = phoneNum || trackingPhone;
+    if (!term) return;
+    const found = orders.filter(o => o.phone.includes(term) || o.orderId.toLowerCase().includes(term.toLowerCase()));
+    setSearchedOrders(found);
+  };
+
+  // Admin Add Product
+  const handleAddProduct = async (e) => {
+    e.preventDefault();
+    if (!newProduct.name || !newProduct.price) return showToast('সবগুলো ফিল্ড সঠিকভাবে পুরণ করুন');
+
+    const itemToAdd = {
+      name: newProduct.name,
+      category: newProduct.category,
+      price: Number(newProduct.price),
+      originalPrice: Number(newProduct.originalPrice || newProduct.price * 1.5),
+      discount: '30%',
+      rating: 5.0,
+      reviews: 1,
+      stock: Number(newProduct.stock || 10),
+      sales: 0,
+      image: newProduct.image || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&auto=format&fit=crop&q=60',
+      description: newProduct.description || 'উন্নত মানের অরিজিনাল গ্যাজেট।'
+    };
+
+    try {
+      const productsRef = getArtifactCollection('products');
+      await addDoc(productsRef, itemToAdd);
+      showToast('নতুন গ্যাজেট যোগ করা হয়েছে!');
+      setNewProduct({ name: '', category: 'grooming', price: '', originalPrice: '', stock: '', image: '', description: '' });
+    } catch (e) {
+      console.error(e);
+      setProducts(prev => [{ id: 'p-' + Date.now(), ...itemToAdd }, ...prev]);
+      showToast('গ্যাজেট যোগ করা হয়েছে!');
+    }
+  };
+
+  // Admin Delete Product
+  const handleDeleteProduct = async (id) => {
+    try {
+      const productsRef = getArtifactCollection('products');
+      await deleteDoc(doc(productsRef, id));
+      showToast('প্রোডাক্ট মুছে ফেলা হয়েছে');
+    } catch (e) {
+      setProducts(prev => prev.filter(p => p.id !== id));
+      showToast('প্রোডাক্ট মুছে ফেলা হয়েছে');
+    }
+  };
+
+  // Admin Update Order Status
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const ordersRef = getArtifactCollection('orders');
+      const foundDoc = orders.find(o => o.id === orderId || o.orderId === orderId);
+      if (foundDoc && foundDoc.id) {
+        await updateDoc(doc(ordersRef, foundDoc.id), { status: newStatus });
+      } else {
+        setOrders(prev => prev.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o));
+      }
+      showToast(`অর্ডার স্ট্যাটাস ${newStatus} করা হয়েছে`);
+    } catch (e) {
+      setOrders(prev => prev.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o));
+      showToast('স্ট্যাটাস আপডেট করা হয়েছে');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-emerald-500 selection:text-white pb-20 md:pb-0">
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-24 md:bottom-6 right-4 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 border border-emerald-500/30 animate-bounce">
+          <Check className="w-5 h-5 text-emerald-400" />
+          <span className="text-xs sm:text-sm font-medium">{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Top Bar with Navigation Controls */}
+      <div className="bg-slate-900 text-slate-300 text-xs py-2 px-4 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <span className="flex items-center space-x-1.5 text-emerald-400 font-bold">
+              <Sparkles className="w-4 h-4" />
+              <span>দরকারী গ্যাজেট (Dorkari Gadget)</span>
+            </span>
+            <span className="hidden sm:inline text-slate-600">|</span>
+            <span className="hidden sm:inline text-slate-400">হটলাইন: 01700-000000</span>
+          </div>
+
+          {/* Navigation Controls in Top Bar */}
+          <div className="flex items-center space-x-2">
+            {viewMode !== 'store' && (
+              <button
+                onClick={handleResetToHome}
+                className="px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>ব্যাক (Back)</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleResetToHome}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                viewMode === 'store' ? 'bg-[#00a651] text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">হোম (Home)</span>
+            </button>
+
+            <button
+              onClick={() => setViewMode('tracking')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                viewMode === 'tracking' ? 'bg-[#00a651] text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">ট্র্যাকিং</span>
+            </button>
+
+            <button
+              onClick={() => setViewMode('admin')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                viewMode === 'admin' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 hover:bg-slate-700 text-amber-400'
+              }`}
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>এডমিন</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Navigation Bar */}
+      <header className="sticky top-0 z-40 bg-white shadow-md border-b border-slate-100">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          
+          {/* Back & Menu Mobile Toggle Buttons */}
+          <div className="flex items-center space-x-2">
+            {viewMode !== 'store' && (
+              <button
+                onClick={handleResetToHome}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                title="Back to Home"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            )}
+
+            <button
+              onClick={() => setIsMenuOpen(true)}
+              className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#00a651] font-bold flex items-center space-x-1"
+            >
+              <Menu className="w-5 h-5" />
+              <span className="text-xs font-bold hidden sm:inline">মেনু (Menu)</span>
+            </button>
+
+            {/* Home Icon Button */}
+            <button
+              onClick={handleResetToHome}
+              className="p-2 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-[#00a651] text-slate-700 transition hidden sm:flex items-center space-x-1"
+              title="Go to Home"
+            >
+              <Home className="w-5 h-5" />
+              <span className="text-xs font-bold">হোম</span>
+            </button>
+          </div>
+
+          {/* Logo */}
+          <div className="flex items-center space-x-2 cursor-pointer" onClick={handleResetToHome}>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-green-500 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-emerald-500/30">
+              D
+            </div>
+            <div>
+              <span className="text-lg md:text-2xl font-black tracking-tight text-slate-900 block leading-none">
+                DORKARI<span className="text-[#00a651]">.GADGET</span>
+              </span>
+              <span className="text-[9px] tracking-widest text-slate-500 font-bold uppercase block mt-0.5">
+                দরকারী গ্যাজেট শপ
+              </span>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="flex-1 max-w-md hidden md:flex items-center">
+            <div className="relative w-full flex items-center border-2 border-[#00a651] rounded-xl overflow-hidden bg-slate-50">
+              <input
+                type="text"
+                placeholder="গ্যাজেটের নাম দিয়ে খুঁজুন..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 text-sm text-slate-800 bg-transparent outline-none"
+              />
+              <button className="bg-[#00a651] text-white px-5 py-2.5 flex items-center justify-center">
+                <Search className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Cart Button */}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="relative flex items-center space-x-2 bg-emerald-50 border border-emerald-200 hover:bg-[#00a651] text-[#00a651] hover:text-white px-3 sm:px-4 py-2 rounded-xl transition duration-200 font-bold"
+          >
+            <ShoppingBag className="w-5 h-5" />
+            <span className="text-xs sm:text-sm hidden lg:inline">৳{cartTotal.toLocaleString()}</span>
+            {cartItemCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-rose-600 text-white text-[10px] font-extrabold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow">
+                {cartItemCount}
+              </span>
+            )}
+          </button>
+        </div>
+      </header>
+
+      {/* VIEW 1: CUSTOMER STOREFRONT */}
+      {viewMode === 'store' && (
+        <main className="max-w-7xl mx-auto px-4 py-6 space-y-8">
+          
+          {/* Mobile Search Input */}
+          <div className="md:hidden">
+            <div className="relative flex items-center border-2 border-[#00a651] rounded-xl overflow-hidden bg-white shadow-sm">
+              <input
+                type="text"
+                placeholder="গ্যাজেট সার্চ করুন..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2.5 text-sm outline-none"
+              />
+              <button className="bg-[#00a651] text-white px-4 py-3">
+                <Search className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Banner Hero Section */}
+          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white shadow-2xl p-6 md:p-12 border border-slate-800">
+            <div className="relative z-10 max-w-xl space-y-4">
+              <span className="inline-flex items-center space-x-1.5 bg-emerald-500/20 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full border border-emerald-500/30">
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>আজকের স্পেশাল মেগা ডিল</span>
+              </span>
+              <h1 className="text-2xl md:text-5xl font-extrabold text-white leading-tight">
+                স্মার্ট জীবনযাপনে সেরা গ্যাজেট এবার হাতের মুঠোয়!
+              </h1>
+              <p className="text-slate-300 text-xs md:text-sm leading-relaxed">
+                ১০০% অরিজিনাল প্রডাক্টের গ্যারান্টি সহ ক্যাশ অন ডেলিভারিতে অর্ডার করুন। সারা বাংলাদেশে ক্যাশ অন ডেলিভারি দেওয়া হয়।
+              </p>
+
+              {/* Flash Sale Countdown Timer */}
+              <div className="flex items-center space-x-3 pt-2">
+                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">অফার শেষ হতে বাকি:</span>
+                <div className="flex space-x-1.5 font-mono text-xs font-bold">
+                  <span className="bg-emerald-500 text-slate-950 px-2 py-1 rounded-md">{String(timeLeft.hours).padStart(2, '0')}h</span>
+                  <span className="bg-emerald-500 text-slate-950 px-2 py-1 rounded-md">{String(timeLeft.minutes).padStart(2, '0')}m</span>
+                  <span className="bg-emerald-500 text-slate-950 px-2 py-1 rounded-md">{String(timeLeft.seconds).padStart(2, '0')}s</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Categories Selector */}
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg md:text-xl font-black text-slate-900 flex items-center space-x-2">
+                <Grid className="w-5 h-5 text-[#00a651]" />
+                <span>পপুলার ক্যাটাগরি</span>
+              </h2>
+            </div>
+            <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-none">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl whitespace-nowrap text-xs font-bold transition shadow-sm border ${
+                    selectedCategory === cat.id
+                      ? 'bg-[#00a651] text-white border-[#00a651] shadow-emerald-500/20'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="text-base">{cat.icon}</span>
+                  <span>{cat.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Product Grid */}
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg md:text-xl font-black text-slate-900 flex items-center space-x-2">
+                <Sparkles className="w-5 h-5 text-[#00a651]" />
+                <span>ট্রেন্ডিং গ্যাজেট সমূহ</span>
+              </h2>
+              <span className="text-xs text-slate-500 font-bold">{filteredProducts.length} টি প্রোডাক্ট পাওয়া গেছে</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+              {filteredProducts.map(product => (
+                <div
+                  key={product.id}
+                  className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group"
+                >
+                  <div className="relative">
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="w-full h-40 sm:h-48 object-cover group-hover:scale-105 transition duration-500"
+                    />
+                    <span className="absolute top-3 left-3 bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow">
+                      {product.discount} ছাড়
+                    </span>
+                    <button
+                      onClick={() => toggleWishlist(product.id)}
+                      className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur-md rounded-full text-slate-600 hover:text-rose-600 transition shadow"
+                    >
+                      <Heart className={`w-4 h-4 ${wishlist.includes(product.id) ? 'fill-rose-600 text-rose-600' : ''}`} />
+                    </button>
+                  </div>
+
+                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-bold text-slate-800 line-clamp-2 leading-snug group-hover:text-[#00a651] transition">
+                        {product.name}
+                      </h3>
+                      <div className="flex items-center space-x-1 mt-1 text-amber-500 text-xs">
+                        <Star className="w-3.5 h-3.5 fill-amber-400" />
+                        <span className="font-bold">{product.rating}</span>
+                        <span className="text-slate-400 text-[10px]">({product.reviews})</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-baseline space-x-2">
+                        <span className="text-base sm:text-lg font-black text-[#00a651]">৳{product.price}</span>
+                        <span className="text-xs text-slate-400 line-through">৳{product.originalPrice}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 mt-3">
+                        <button
+                          onClick={() => setQuickViewProduct(product)}
+                          className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">ডিটেইলস</span>
+                        </button>
+                        <button
+                          onClick={() => addToCart(product)}
+                          className="w-full py-2 bg-[#00a651] hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1 shadow-md shadow-emerald-500/20"
+                        >
+                          <ShoppingCart className="w-3.5 h-3.5" />
+                          <span>কার্টে নিন</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </main>
+      )}
+
+      {/* VIEW 2: ORDER TRACKING */}
+      {viewMode === 'tracking' && (
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          <button
+            onClick={handleResetToHome}
+            className="mb-4 inline-flex items-center space-x-2 text-xs font-bold text-slate-600 hover:text-[#00a651] bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>হোমে ফিরে যান (Back to Home)</span>
+          </button>
+
+          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200">
+            <h2 className="text-xl font-black text-slate-900 mb-2 flex items-center space-x-2">
+              <Truck className="w-6 h-6 text-[#00a651]" />
+              <span>আপনার অর্ডার ট্র্যাক করুন</span>
+            </h2>
+            <p className="text-xs text-slate-500 mb-6">অর্ডার করার সময় ব্যবহৃত মোবাইল নাম্বার অথবা অর্ডার আইডি লিখুন:</p>
+
+            <div className="flex gap-2 mb-6">
+              <input
+                type="text"
+                placeholder="017xxxxxxxx অথবা DG-123456"
+                value={trackingPhone}
+                onChange={(e) => setTrackingPhone(e.target.value)}
+                className="flex-1 px-4 py-3 rounded-2xl border-2 border-slate-200 focus:border-[#00a651] outline-none text-sm font-semibold"
+              />
+              <button
+                onClick={() => handleSearchOrder()}
+                className="bg-[#00a651] hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-bold text-xs shadow-lg transition"
+              >
+                খুঁজুন
+              </button>
+            </div>
+
+            {searchedOrders && (
+              <div className="space-y-4">
+                {searchedOrders.length === 0 ? (
+                  <div className="p-4 bg-amber-50 text-amber-800 rounded-2xl text-xs font-bold text-center">
+                    কোনো অর্ডার পাওয়া যায়নি!
+                  </div>
+                ) : (
+                  searchedOrders.map((order, idx) => (
+                    <div key={idx} className="border-2 border-slate-100 rounded-2xl p-4 bg-slate-50 space-y-3">
+                      <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                        <div>
+                          <span className="text-xs font-black text-slate-900">{order.orderId}</span>
+                          <span className="block text-[10px] text-slate-500">{order.createdAt}</span>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-black ${
+                          order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' :
+                          order.status === 'Cancelled' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {order.status}
+                        </span>
+                      </div>
+
+                      <div className="text-xs space-y-1 text-slate-700">
+                        <p><strong>গ্রাহক:</strong> {order.customerName} ({order.phone})</p>
+                        <p><strong>ঠিকানা:</strong> {order.address}, {order.district}</p>
+                        <p><strong>মোট মূল্য:</strong> ৳{order.totalAmount} ({order.paymentMethod.toUpperCase()})</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 3: ADMIN BACKEND DASHBOARD */}
+      {viewMode === 'admin' && (
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <button
+            onClick={handleResetToHome}
+            className="mb-4 inline-flex items-center space-x-2 text-xs font-bold text-slate-600 hover:text-[#00a651] bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>স্টোরে ফিরে যান (Back to Store)</span>
+          </button>
+
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 flex items-center space-x-2">
+                <LayoutDashboard className="w-7 h-7 text-amber-500" />
+                <span>এডমিন ড্যাশবোর্ড (Admin Panel)</span>
+              </h1>
+              <p className="text-xs text-slate-500 mt-1">প্রোডাক্ট যোগ করুন, স্টক সামলান এবং অর্ডার স্ট্যাটাস আপডেট করুন</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Add New Product Form */}
+            <div className="bg-white p-6 rounded-3xl shadow-xl border border-slate-200 space-y-4 h-fit">
+              <h3 className="text-base font-black text-slate-900 flex items-center space-x-2">
+                <Plus className="w-5 h-5 text-[#00a651]" />
+                <span>নতুন গ্যাজেট যোগ করুন</span>
+              </h3>
+
+              <form onSubmit={handleAddProduct} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-600">প্রোডাক্টের নাম</label>
+                  <input
+                    type="text"
+                    required
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none focus:border-[#00a651]"
+                    placeholder="যেমন: T9 Trimmer"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">বিক্রয় মূল্য (৳)</label>
+                    <input
+                      type="number"
+                      required
+                      value={newProduct.price}
+                      onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none focus:border-[#00a651]"
+                      placeholder="650"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">আসল মূল্য (৳)</label>
+                    <input
+                      type="number"
+                      value={newProduct.originalPrice}
+                      onChange={(e) => setNewProduct({ ...newProduct, originalPrice: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none focus:border-[#00a651]"
+                      placeholder="1200"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">ক্যাটাগরি</label>
+                    <select
+                      value={newProduct.category}
+                      onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none bg-white"
+                    >
+                      {CATEGORIES.filter(c => c.id !== 'all').map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">স্টক পরিমাণ</label>
+                    <input
+                      type="number"
+                      value={newProduct.stock}
+                      onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none focus:border-[#00a651]"
+                      placeholder="20"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-600">ছবি লিংক (Image URL)</label>
+                  <input
+                    type="url"
+                    value={newProduct.image}
+                    onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none focus:border-[#00a651]"
+                    placeholder="https://..."
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-[#00a651] hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-lg transition"
+                >
+                  প্রোডাক্ট সেভ করুন
+                </button>
+              </form>
+            </div>
+
+            {/* Manage Existing Products & Orders */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* Manage Products */}
+              <div className="bg-white p-6 rounded-3xl shadow-xl border border-slate-200">
+                <h3 className="text-base font-black text-slate-900 mb-4 flex items-center space-x-2">
+                  <Package className="w-5 h-5 text-[#00a651]" />
+                  <span>বর্তমান গ্যাজেট সমূহের তালিকা ({products.length})</span>
+                </h3>
+
+                <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                  {products.map(p => (
+                    <div key={p.id} className="flex items-center justify-between p-3 border rounded-2xl hover:bg-slate-50 transition">
+                      <div className="flex items-center space-x-3">
+                        <img src={p.image} alt={p.name} className="w-12 h-12 rounded-xl object-cover" />
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 line-clamp-1">{p.name}</h4>
+                          <span className="text-[10px] text-slate-500 font-bold">স্টক: {p.stock} টি | মূল্য: ৳{p.price}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteProduct(p.id)}
+                        className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manage Orders */}
+              <div className="bg-white p-6 rounded-3xl shadow-xl border border-slate-200">
+                <h3 className="text-base font-black text-slate-900 mb-4 flex items-center space-x-2">
+                  <ShoppingBag className="w-5 h-5 text-amber-500" />
+                  <span>গ্রাহকের অর্ডার সমূহ ({orders.length})</span>
+                </h3>
+
+                <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+                  {orders.length === 0 ? (
+                    <p className="text-xs text-slate-400 font-bold text-center py-4">এখনো কোনো অর্ডার আসেনি</p>
+                  ) : (
+                    orders.map((ord, idx) => (
+                      <div key={idx} className="p-4 border rounded-2xl bg-slate-50 space-y-2">
+                        <div className="flex justify-between items-center border-b pb-2">
+                          <div>
+                            <span className="text-xs font-black text-slate-900">{ord.orderId}</span>
+                            <span className="block text-[10px] text-slate-500">{ord.customerName} - {ord.phone}</span>
+                          </div>
+                          <select
+                            value={ord.status}
+                            onChange={(e) => handleUpdateOrderStatus(ord.id || ord.orderId, e.target.value)}
+                            className="text-xs font-bold px-2 py-1 rounded-lg border bg-white"
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Processing">Processing</option>
+                            <option value="Shipped">Shipped</option>
+                            <option value="Delivered">Delivered</option>
+                            <option value="Cancelled">Cancelled</option>
+                          </select>
+                        </div>
+                        <div className="text-[11px] text-slate-600">
+                          <p><strong>ঠিকানা:</strong> {ord.address}, {ord.district}</p>
+                          <p><strong>মোট:</strong> ৳{ord.totalAmount} ({ord.paymentMethod})</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* SLIDE-OUT MENU DRAWER */}
+      {isMenuOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)}></div>
+          <div className="fixed inset-y-0 left-0 max-w-full flex">
+            <div className="w-screen max-w-xs bg-white shadow-2xl flex flex-col">
+              <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <div className="flex items-center space-x-2">
+                  <Menu className="w-5 h-5 text-emerald-400" />
+                  <span className="font-bold text-sm">নেভিগেশন মেনু</span>
+                </div>
+                <button onClick={() => setIsMenuOpen(false)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 flex-1 overflow-y-auto space-y-4">
+                <div className="space-y-1">
+                  <button
+                    onClick={handleResetToHome}
+                    className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-emerald-50 text-slate-800 font-bold text-xs"
+                  >
+                    <Home className="w-4 h-4 text-[#00a651]" />
+                    <span>হোম পেজ (Home)</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setViewMode('tracking'); setIsMenuOpen(false); }}
+                    className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-emerald-50 text-slate-800 font-bold text-xs"
+                  >
+                    <Truck className="w-4 h-4 text-blue-600" />
+                    <span>অর্ডার ট্র্যাক করুন</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setViewMode('admin'); setIsMenuOpen(false); }}
+                    className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-amber-50 text-slate-800 font-bold text-xs"
+                  >
+                    <LayoutDashboard className="w-4 h-4 text-amber-500" />
+                    <span>এডমিন প্যানেল</span>
+                  </button>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                <div>
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-2">ক্যাটাগরি সমূহ</h4>
+                  <div className="space-y-1">
+                    {CATEGORIES.map(cat => (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          setSelectedCategory(cat.id);
+                          setViewMode('store');
+                          setIsMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-bold transition ${
+                          selectedCategory === cat.id ? 'bg-[#00a651] text-white' : 'hover:bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        <span>{cat.icon}</span>
+                        <span>{cat.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-slate-100 bg-slate-50">
+                <button
+                  onClick={() => setIsMenuOpen(false)}
+                  className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>বন্ধ করুন (Close)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SHOPPING CART DRAWER */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsCartOpen(false)}></div>
+          <div className="fixed inset-y-0 right-0 max-w-full flex">
+            <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+              <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <div className="flex items-center space-x-2">
+                  <ShoppingBag className="w-5 h-5 text-emerald-400" />
+                  <span className="font-bold text-sm">আপনার শপিং কার্ট</span>
+                </div>
+                <button onClick={() => setIsCartOpen(false)} className="p-1 text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 flex-1 overflow-y-auto space-y-3">
+                {cart.length === 0 ? (
+                  <div className="text-center py-12 space-y-3">
+                    <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto" />
+                    <p className="text-xs text-slate-500 font-bold">আপনার কার্ট খালি আছে</p>
+                  </div>
+                ) : (
+                  cart.map(item => (
+                    <div key={item.id} className="flex items-center justify-between p-3 border rounded-2xl bg-slate-50">
+                      <div className="flex items-center space-x-3">
+                        <img src={item.image} alt={item.name} className="w-12 h-12 rounded-xl object-cover" />
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 line-clamp-1">{item.name}</h4>
+                          <span className="text-xs font-black text-[#00a651]">৳{item.price}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 bg-white border px-2 py-1 rounded-xl">
+                        <button onClick={() => updateCartQty(item.id, -1)} className="text-slate-500 hover:text-rose-600">
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs font-bold w-4 text-center">{item.qty}</span>
+                        <button onClick={() => updateCartQty(item.id, 1)} className="text-slate-500 hover:text-[#00a651]">
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {cart.length > 0 && (
+                <div className="p-4 border-t bg-slate-50 space-y-3">
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>মোট প্রোডাক্ট মূল্য:</span>
+                    <span className="text-[#00a651]">৳{cartTotal.toLocaleString()}</span>
+                  </div>
+                  <button
+                    onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
+                    className="w-full bg-[#00a651] hover:bg-emerald-700 text-white font-bold py-3 rounded-2xl text-xs shadow-lg transition"
+                  >
+                    অর্ডার করতে এগিয়ে যান (Checkout)
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK VIEW MODAL */}
+      {quickViewProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl relative">
+            <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center pointer-events-none">
+              <button
+                onClick={() => setQuickViewProduct(null)}
+                className="pointer-events-auto bg-slate-900/80 hover:bg-slate-900 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1 shadow"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>ব্যাক (Back)</span>
+              </button>
+              <button
+                onClick={() => setQuickViewProduct(null)}
+                className="pointer-events-auto bg-slate-100 p-2 rounded-full text-slate-600 hover:bg-slate-200 shadow"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2">
+              <img src={quickViewProduct.image} alt={quickViewProduct.name} className="w-full h-64 md:h-full object-cover" />
+              <div className="p-6 space-y-4 flex flex-col justify-between">
+                <div>
+                  <h2 className="text-base font-black text-slate-900">{quickViewProduct.name}</h2>
+                  <p className="text-xs text-slate-500 mt-2 leading-relaxed">{quickViewProduct.description}</p>
+                </div>
+                <div>
+                  <div className="text-xl font-black text-[#00a651] mb-4">৳{quickViewProduct.price}</div>
+                  <button
+                    onClick={() => { addToCart(quickViewProduct); setQuickViewProduct(null); }}
+                    className="w-full bg-[#00a651] text-white py-3 rounded-2xl font-bold text-xs shadow-lg"
+                  >
+                    কার্টে যোগ করুন
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHECKOUT MODAL */}
+      {isCheckoutOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+              <button
+                onClick={() => setIsCheckoutOpen(false)}
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center space-x-1 bg-slate-100 px-2.5 py-1.5 rounded-lg"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>ফিরে যান</span>
+              </button>
+              <h3 className="text-sm font-bold text-slate-900">অর্ডার নিশ্চিত করুন</h3>
+              <button onClick={() => setIsCheckoutOpen(false)} className="text-slate-400"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handlePlaceOrder} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700">আপনার নাম *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: রহিম আহমেদ"
+                  value={customerInfo.name}
+                  onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none focus:border-[#00a651]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700">মোবাইল নম্বর *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="017xxxxxxxx"
+                  value={customerInfo.phone}
+                  onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none focus:border-[#00a651]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700">পূর্ণাঙ্গ ডেলিভারি ঠিকানা *</label>
+                <textarea
+                  required
+                  rows="2"
+                  placeholder="হাউজ নম্বর, রোড নম্বর, এলাকা..."
+                  value={customerInfo.address}
+                  onChange={(e) => setCustomerInfo({ ...customerInfo, address: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none focus:border-[#00a651]"
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700">জেলা</label>
+                <select
+                  value={customerInfo.district}
+                  onChange={(e) => setCustomerInfo({ ...customerInfo, district: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border rounded-xl text-xs outline-none bg-white"
+                >
+                  <option value="ঢাকা (Dhaka)">ঢাকার ভেতরে (ডেলিভারি চার্জ ৳৬০)</option>
+                  <option value="ঢাকার বাইরে">ঢাকার বাইরে (ডেলিভারি চার্জ ৳১২০)</option>
+                </select>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-2xl space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">প্রোডাক্ট মূল্য:</span>
+                  <span className="font-bold">৳{cartTotal}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">ডেলিভারি চার্জ:</span>
+                  <span className="font-bold">৳{deliveryCharge}</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t font-black text-slate-900">
+                  <span>সর্বমোট:</span>
+                  <span className="text-[#00a651]">৳{grandTotal}</span>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-[#00a651] hover:bg-emerald-700 text-white font-bold py-3 rounded-2xl text-xs shadow-lg transition"
+              >
+                অর্ডার নিশ্চিত করুন (৳{grandTotal})
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RESPONSIVE MOBILE BOTTOM NAVIGATION BAR */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 md:hidden px-2 py-1.5 flex justify-around items-center shadow-lg">
+        <button
+          onClick={handleResetToHome}
+          className={`flex flex-col items-center p-1.5 rounded-xl text-[10px] font-bold ${
+            viewMode === 'store' && selectedCategory === 'all' ? 'text-[#00a651]' : 'text-slate-500'
+          }`}
+        >
+          <Home className="w-5 h-5 mb-0.5" />
+          <span>হোম</span>
+        </button>
+
+        <button
+          onClick={() => setIsMenuOpen(true)}
+          className="flex flex-col items-center p-1.5 text-slate-500 rounded-xl text-[10px] font-bold"
+        >
+          <Menu className="w-5 h-5 mb-0.5" />
+          <span>মেনু</span>
+        </button>
+
+        <button
+          onClick={() => setIsCartOpen(true)}
+          className="relative flex flex-col items-center p-1.5 text-slate-500 rounded-xl text-[10px] font-bold"
+        >
+          <ShoppingBag className="w-5 h-5 mb-0.5" />
+          <span>কার্ট</span>
+          {cartItemCount > 0 && (
+            <span className="absolute top-0 right-2 bg-rose-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+              {cartItemCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setViewMode('tracking')}
+          className={`flex flex-col items-center p-1.5 rounded-xl text-[10px] font-bold ${
+            viewMode === 'tracking' ? 'text-[#00a651]' : 'text-slate-500'
+          }`}
+        >
+          <Truck className="w-5 h-5 mb-0.5" />
+          <span>ট্র্যাকিং</span>
+        </button>
+
+        {viewMode !== 'store' ? (
+          <button
+            onClick={handleResetToHome}
+            className="flex flex-col items-center p-1.5 rounded-xl text-[10px] font-bold text-rose-600"
+          >
+            <ArrowLeft className="w-5 h-5 mb-0.5" />
+            <span>ব্যাক</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => setViewMode('admin')}
+            className="flex flex-col items-center p-1.5 rounded-xl text-[10px] font-bold text-amber-600"
+          >
+            <LayoutDashboard className="w-5 h-5 mb-0.5" />
+            <span>এডমিন</span>
+          </button>
+        )}
+      </nav>
+
+    </div>
+  );
+}
